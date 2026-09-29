@@ -25,6 +25,40 @@ model Message {
   role           String
   content        String
   createdAt      DateTime     @default(now())
+  ads            MessageAd[]
 
   @@index([conversationId])
+}
+
+model MessageAd {
+  id        String   @id @default(uuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  adId      String
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  position  Int
+  score     Float
+  qSim      Float
+  aSim      Float
+  clicked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, adId])
+  @@index([adId])
+}
+
+model Ad {
+  id           String      @id @default(uuid())
+  advertiser   String
+  title        String
+  body         String
+  url          String
+  keywords     String[]
+  bidCpc       Float       @default(0)
+  qualityScore Float       @default(1.0)
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  placements   MessageAd[]
+
+  @@index([active])
 }

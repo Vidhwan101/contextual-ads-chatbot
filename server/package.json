@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
+    "dev": "node --watch-path=./src src/index.js",
+    "seed": "node prisma/seed.js",
     "postinstall": "prisma skills sync || exit 0"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@prisma/client": "^6.19.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

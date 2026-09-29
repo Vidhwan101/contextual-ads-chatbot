@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import Groq from 'groq-sdk'
 import { prisma } from '../lib/prisma.js'
+import { getCandidates, rankAds } from '../services/adMatch.js'
 
 const router = Router()
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
@@ -15,26 +16,20 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'conversationId is required' })
   }
 
-  // Check if this is the first message in the conversation
-  const messageCount = await prisma.message.count({
-  where: { conversationId },
-  })
+  const messageCount = await prisma.message.count({ where: { conversationId } })
 
-  // Save user message to DB
   await prisma.message.create({
-  data: { conversationId, role: 'user', content: message },
+    data: { conversationId, role: 'user', content: message },
   })
 
-  // If this was the first message, use it as the conversation title
   if (messageCount === 0) {
-  const title = message.length > 40 ? message.slice(0, 40).trim() + '…' : message
-  await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { title },
-  })
+    const title = message.length > 40 ? message.slice(0, 40).trim() + '…' : message
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { title },
+    })
   }
 
-  // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('Connection', 'keep-alive')
@@ -44,13 +39,19 @@ router.post('/', async (req, res) => {
 
   const STREAM_DELAY_MS = Number(process.env.STREAM_DELAY_MS ?? 15)
 
-  // Load prior messages for context
-  const history = await prisma.message.findMany({
-    where: { conversationId },
-    orderBy: { createdAt: 'asc' },
-    take: 20,
-    select: { role: true, content: true },
-  })
+  // Load history and fetch ad candidates in parallel
+  const [history, candidates] = await Promise.all([
+    prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+      select: { role: true, content: true },
+    }),
+    getCandidates(message, 30).catch((err) => {
+      console.error('[ads] candidate fetch failed:', err.message)
+      return []
+    }),
+  ])
 
   let fullReply = ''
 
@@ -76,16 +77,58 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Save assistant message to DB
-    await prisma.message.create({
+    const assistantMsg = await prisma.message.create({
       data: { conversationId, role: 'assistant', content: fullReply },
     })
 
-    // Bump conversation updatedAt
     await prisma.conversation.update({
       where: { id: conversationId },
       data: { updatedAt: new Date() },
     })
+
+    // Stage 2: rank ads against the finished answer
+    let chosenAds = []
+    if (candidates.length > 0) {
+      try {
+        chosenAds = await rankAds({
+          query: message,
+          answer: fullReply,
+          candidates,
+          maxAds: 2,
+        })
+
+        if (chosenAds.length > 0) {
+          await prisma.messageAd.createMany({
+            data: chosenAds.map((ad, i) => ({
+              messageId: assistantMsg.id,
+              adId: ad.id,
+              position: i,
+              score: ad.score,
+              qSim: ad.query_sim,
+              aSim: ad.answer_sim,
+            })),
+          })
+          console.log(
+            `[ads] matched ${chosenAds.length} for query "${message.slice(0, 40)}":`,
+            chosenAds.map((a) => `${a.advertiser} (${a.score.toFixed(2)})`).join(', ')
+          )
+        }
+      } catch (err) {
+        console.error('[ads] ranking failed:', err.message)
+      }
+    }
+
+    res.write(
+      `data: ${JSON.stringify({
+        ads: chosenAds.map((a) => ({
+          id: a.id,
+          advertiser: a.advertiser,
+          title: a.title,
+          body: a.body,
+          url: a.url,
+        })),
+      })}\n\n`
+    )
 
     res.write('data: [DONE]\n\n')
     res.end()
