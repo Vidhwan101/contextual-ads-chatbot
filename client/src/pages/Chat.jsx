@@ -20,7 +20,7 @@ export default function Chat() {
   const [streaming, setStreaming] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const bottomRef = useRef(null)
-  const skipNextLoadRef = useRef(false)
+  const loadedConversations = useRef(new Set())
 
   useEffect(() => {
     fetch(`${API}/api/conversations?sessionId=${sessionId}`)
@@ -38,11 +38,11 @@ export default function Chat() {
     setMessages([])
     return
   }
-  // Skip loading if we just created this conversation
-  if (skipNextLoadRef.current) {
-    skipNextLoadRef.current = false
+  // Already loaded this conversation in this session — don't refetch
+  if (loadedConversations.current.has(activeId)) {
     return
   }
+  loadedConversations.current.add(activeId)
   setLoadingMessages(true)
   fetch(`${API}/api/conversations/${activeId}`)
     .then((r) => r.json())
@@ -65,7 +65,7 @@ export default function Chat() {
     })
     .catch((e) => console.error(e))
     .finally(() => setLoadingMessages(false))
-}, [activeId])
+  }, [activeId])
 
   async function newConversation() {
   const res = await fetch(`${API}/api/conversations`, {
@@ -75,8 +75,8 @@ export default function Chat() {
   })
   const conv = await res.json()
   setConversations((prev) => [conv, ...prev])
-  // Prevent the load-messages effect from clobbering state we're about to build
-  skipNextLoadRef.current = true
+  // Mark as loaded so the effect doesn't overwrite local state we're building
+  loadedConversations.current.add(conv.id)
   setActiveId(conv.id)
   return conv.id
   }
@@ -134,36 +134,38 @@ export default function Chat() {
         buffer = parts.pop() ?? ''
 
         for (const part of parts) {
-          if (!part.startsWith('data: ')) continue
-          const payload = part.slice(6)
-          if (payload === '[DONE]') continue
+  if (!part.startsWith('data: ')) continue
+  const payload = part.slice(6)
+  
+  if (payload === '[DONE]') {
+    console.log('[SSE] DONE')
+    continue
+  }
 
-          const data = JSON.parse(payload)
-          if (data.error) throw new Error(data.error)
+  const data = JSON.parse(payload)
+  if (data.error) throw new Error(data.error)
 
-          if (data.text) {
-            setMessages((prev) => {
-              const copy = [...prev]
-              const last = copy[copy.length - 1]
-              copy[copy.length - 1] = {
-                ...last,
-                content: last.content + data.text,
-              }
-              return copy
-            })
-          }
+  if (data.text) {
+    setMessages((prev) => {
+      const copy = [...prev]
+      const last = copy[copy.length - 1]
+      copy[copy.length - 1] = {
+        ...last,
+        content: last.content + data.text,
+      }
+      return copy
+    })
+  }
 
-          if (Array.isArray(data.ads)) {
-  console.log('[SSE] ads event received:', data.ads)
-  setMessages((prev) => {
-    const copy = [...prev]
-    const last = copy[copy.length - 1]
-    console.log('[SSE] setting ads on message:', last?.role, 'count:', data.ads.length)
-    copy[copy.length - 1] = { ...last, ads: data.ads }
-    return copy
-  })
+  if (Array.isArray(data.ads)) {
+    setMessages((prev) => {
+      const copy = [...prev]
+      const last = copy[copy.length - 1]
+      copy[copy.length - 1] = { ...last, ads: data.ads }
+      return copy
+    })
+  }
 }
-        }
       }
     } catch (err) {
       setMessages((prev) => {
