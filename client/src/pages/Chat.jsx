@@ -20,8 +20,8 @@ export default function Chat() {
   const [streaming, setStreaming] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const bottomRef = useRef(null)
+  const skipNextLoadRef = useRef(false)
 
-  // Load conversation list on mount
   useEffect(() => {
     fetch(`${API}/api/conversations?sessionId=${sessionId}`)
       .then((r) => r.json())
@@ -29,35 +29,56 @@ export default function Chat() {
       .catch((e) => console.error(e))
   }, [sessionId])
 
-  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Load messages when active conversation changes
   useEffect(() => {
-    if (!activeId) {
-      setMessages([])
-      return
-    }
-    setLoadingMessages(true)
-    fetch(`${API}/api/conversations/${activeId}`)
-      .then((r) => r.json())
-      .then((data) => setMessages(data.messages || []))
-      .catch((e) => console.error(e))
-      .finally(() => setLoadingMessages(false))
-  }, [activeId])
+  if (!activeId) {
+    setMessages([])
+    return
+  }
+  // Skip loading if we just created this conversation
+  if (skipNextLoadRef.current) {
+    skipNextLoadRef.current = false
+    return
+  }
+  setLoadingMessages(true)
+  fetch(`${API}/api/conversations/${activeId}`)
+    .then((r) => r.json())
+    .then((data) => {
+      const transformed = (data.messages || []).map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        ads: (m.ads || []).map((p) => ({
+          id: p.ad.id,
+          messageAdId: p.id,
+          advertiser: p.ad.advertiser,
+          title: p.ad.title,
+          body: p.ad.body,
+          url: p.ad.url,
+          clicked: p.clicked,
+        })),
+      }))
+      setMessages(transformed)
+    })
+    .catch((e) => console.error(e))
+    .finally(() => setLoadingMessages(false))
+}, [activeId])
 
   async function newConversation() {
-    const res = await fetch(`${API}/api/conversations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId }),
-    })
-    const conv = await res.json()
-    setConversations((prev) => [conv, ...prev])
-    setActiveId(conv.id)
-    return conv.id
+  const res = await fetch(`${API}/api/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  })
+  const conv = await res.json()
+  setConversations((prev) => [conv, ...prev])
+  // Prevent the load-messages effect from clobbering state we're about to build
+  skipNextLoadRef.current = true
+  setActiveId(conv.id)
+  return conv.id
   }
 
   async function deleteConversation(id, e) {
@@ -65,6 +86,11 @@ export default function Chat() {
     await fetch(`${API}/api/conversations/${id}`, { method: 'DELETE' })
     setConversations((prev) => prev.filter((c) => c.id !== id))
     if (activeId === id) setActiveId(null)
+  }
+
+  function trackAdClick(messageAdId) {
+    // sendBeacon survives page navigation
+    navigator.sendBeacon(`${API}/api/ads/${messageAdId}/click`)
   }
 
   async function send(e) {
@@ -75,7 +101,6 @@ export default function Chat() {
     setInput('')
     setStreaming(true)
 
-    // Create conversation if none active
     let convId = activeId
     if (!convId) {
       convId = await newConversation()
@@ -84,7 +109,7 @@ export default function Chat() {
     setMessages((prev) => [
       ...prev,
       { role: 'user', content: userMessage },
-      { role: 'assistant', content: '' },
+      { role: 'assistant', content: '', ads: [] },
     ])
 
     try {
@@ -127,6 +152,17 @@ export default function Chat() {
               return copy
             })
           }
+
+          if (Array.isArray(data.ads)) {
+  console.log('[SSE] ads event received:', data.ads)
+  setMessages((prev) => {
+    const copy = [...prev]
+    const last = copy[copy.length - 1]
+    console.log('[SSE] setting ads on message:', last?.role, 'count:', data.ads.length)
+    copy[copy.length - 1] = { ...last, ads: data.ads }
+    return copy
+  })
+}
         }
       }
     } catch (err) {
@@ -146,7 +182,6 @@ export default function Chat() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
       <aside className="w-64 bg-white border-r flex flex-col">
         <div className="p-3 border-b">
           <button
@@ -171,9 +206,7 @@ export default function Chat() {
                   : 'text-slate-600 hover:bg-slate-50')
               }
             >
-              <span className="truncate flex-1">
-                {c.title || 'Untitled'}
-              </span>
+              <span className="truncate flex-1">{c.title || 'Untitled'}</span>
               <button
                 onClick={(e) => deleteConversation(c.id, e)}
                 className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-600 text-xs"
@@ -186,14 +219,13 @@ export default function Chat() {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col">
         <header className="bg-white border-b px-4 py-3">
           <div className="font-semibold">AI Chatbot</div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 space-y-3">
-          <div className="max-w-2xl mx-auto space-y-3">
+        <main className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-2xl mx-auto space-y-4">
             {loadingMessages && (
               <p className="text-sm text-slate-400 text-center">Loading…</p>
             )}
@@ -205,16 +237,46 @@ export default function Chat() {
             )}
 
             {messages.map((m, i) => (
-              <div
-                key={i}
-                className={
-                  m.role === 'user'
-                    ? 'bg-slate-900 text-white rounded-2xl px-4 py-2 ml-auto max-w-[80%] w-fit'
-                    : 'bg-white border rounded-2xl px-4 py-2 mr-auto max-w-[80%] w-fit whitespace-pre-wrap'
-                }
-              >
-                {m.content || (
-                  <span className="text-slate-400 animate-pulse">▍</span>
+              <div key={i} className="space-y-2">
+                <div
+                  className={
+                    m.role === 'user'
+                      ? 'bg-slate-900 text-white rounded-2xl px-4 py-2 ml-auto max-w-[80%] w-fit'
+                      : 'bg-white border rounded-2xl px-4 py-2 mr-auto max-w-[85%] whitespace-pre-wrap'
+                  }
+                >
+                  {m.content || (
+                    <span className="text-slate-400 animate-pulse">▍</span>
+                  )}
+                </div>
+
+                {m.role === 'assistant' && m.ads?.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center gap-2 text-xs text-slate-400 uppercase tracking-wide">
+                      <span>Sponsored</span>
+                      <div className="flex-1 h-px bg-slate-200" />
+                    </div>
+                    {m.ads.map((ad) => (
+                      <a
+                        key={ad.id}
+                        href={ad.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => trackAdClick(ad.messageAdId)}
+                        className="block bg-white border rounded-xl p-3 hover:border-slate-400 hover:shadow-sm transition-all"
+                      >
+                        <div className="text-xs text-slate-500 mb-1">
+                          {ad.advertiser}
+                        </div>
+                        <div className="font-medium text-sm text-slate-900">
+                          {ad.title}
+                        </div>
+                        <div className="text-sm text-slate-600 mt-1">
+                          {ad.body}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
             ))}

@@ -34,7 +34,28 @@ router.get('/:id', async (req, res) => {
     include: {
       messages: {
         orderBy: { createdAt: 'asc' },
-        select: { id: true, role: true, content: true, createdAt: true },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          createdAt: true,
+          ads: {
+            orderBy: { position: 'asc' },
+            select: {
+              id: true,
+              clicked: true,
+              ad: {
+                select: {
+                  id: true,
+                  advertiser: true,
+                  title: true,
+                  body: true,
+                  url: true,
+                },
+              },
+            },
+          },
+        },
       },
     },
   })

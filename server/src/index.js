@@ -3,6 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import chatRoutes from './routes/chat.js'
 import conversationRoutes from './routes/conversations.js'
+import adRoutes from './routes/ads.js'
 
 const app = express()
 
@@ -15,6 +16,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api/chat', chatRoutes)
 app.use('/api/conversations', conversationRoutes)
+app.use('/api/ads', adRoutes)
 
 const PORT = process.env.PORT || 4000
 app.listen(PORT, () => {

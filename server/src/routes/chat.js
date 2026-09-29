@@ -97,38 +97,44 @@ router.post('/', async (req, res) => {
           maxAds: 2,
         })
 
+        let placements = []
         if (chosenAds.length > 0) {
-          await prisma.messageAd.createMany({
-            data: chosenAds.map((ad, i) => ({
-              messageId: assistantMsg.id,
-              adId: ad.id,
-              position: i,
-              score: ad.score,
-              qSim: ad.query_sim,
-              aSim: ad.answer_sim,
-            })),
-          })
-          console.log(
-            `[ads] matched ${chosenAds.length} for query "${message.slice(0, 40)}":`,
-            chosenAds.map((a) => `${a.advertiser} (${a.score.toFixed(2)})`).join(', ')
-          )
-        }
+        placements = await prisma.$transaction(
+          chosenAds.map((ad, i) =>
+            prisma.messageAd.create({
+          data: {
+          messageId: assistantMsg.id,
+          adId: ad.id,
+          position: i,
+          score: ad.score,
+          qSim: ad.query_sim,
+          aSim: ad.answer_sim,
+        },
+      })
+    )
+  )
+  console.log(
+    `[ads] matched ${chosenAds.length} for query "${message.slice(0, 40)}":`,
+    chosenAds.map((a) => `${a.advertiser} (${a.score.toFixed(2)})`).join(', ')
+  )
+}
       } catch (err) {
         console.error('[ads] ranking failed:', err.message)
       }
     }
 
     res.write(
-      `data: ${JSON.stringify({
-        ads: chosenAds.map((a) => ({
-          id: a.id,
-          advertiser: a.advertiser,
-          title: a.title,
-          body: a.body,
-          url: a.url,
-        })),
-      })}\n\n`
-    )
+  `data: ${JSON.stringify({
+    ads: chosenAds.map((a, i) => ({
+      id: a.id,
+      messageAdId: placements[i]?.id,
+      advertiser: a.advertiser,
+      title: a.title,
+      body: a.body,
+      url: a.url,
+    })),
+  })}\n\n`
+)
 
     res.write('data: [DONE]\n\n')
     res.end()
