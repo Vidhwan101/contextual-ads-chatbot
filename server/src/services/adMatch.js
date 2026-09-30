@@ -54,11 +54,17 @@ export async function rankAds({ query, answer, candidates, maxAds = 2 }) {
   )
 
   return scored
-    .filter(
-      (a) =>
-        Number(a.query_sim) > GATE_QUERY_SIM &&
-        Number(a.answer_sim) > GATE_ANSWER_SIM
-    )
+  .filter((a) => {
+    const q = Number(a.query_sim)
+    const ans = Number(a.answer_sim)
+    const pass = q > GATE_QUERY_SIM && ans > GATE_ANSWER_SIM
+    if (!pass) {
+      console.log(
+        `[ads] filtered ${a.advertiser}: qSim=${q.toFixed(3)} aSim=${ans.toFixed(3)}`
+      )
+    }
+    return pass
+  })
     .map((a) => {
       const normalizedBid = Math.min(Number(a.bidCpc) / 2.5, 1)
       const score =

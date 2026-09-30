@@ -20,6 +20,8 @@ export default function Chat() {
   const [streaming, setStreaming] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const bottomRef = useRef(null)
+  const scrollContainerRef = useRef(null)
+  const isUserScrolledUpRef = useRef(false)
   const loadedConversations = useRef(new Set())
 
   useEffect(() => {
@@ -29,9 +31,22 @@ export default function Chat() {
       .catch((e) => console.error(e))
   }, [sessionId])
 
+  // Only auto-scroll if user is near the bottom
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  if (isUserScrolledUpRef.current) return
+  const container = scrollContainerRef.current
+  if (!container) return
+  container.scrollTop = container.scrollHeight
   }, [messages])
+
+// Track whether user has manually scrolled up
+function handleScroll(e) {
+  const el = e.currentTarget
+  const distanceFromBottom =
+    el.scrollHeight - el.scrollTop - el.clientHeight
+  // If they're more than 80px from the bottom, they're reading history
+  isUserScrolledUpRef.current = distanceFromBottom > 80
+}
 
   useEffect(() => {
   if (!activeId) {
@@ -178,13 +193,18 @@ export default function Chat() {
         return copy
       })
     } finally {
-      setStreaming(false)
-    }
+  setStreaming(false)
+  // Refresh conversation list to pick up auto-generated title
+  fetch(`${API}/api/conversations?sessionId=${sessionId}`)
+    .then((r) => r.json())
+    .then(setConversations)
+    .catch(() => {})
+}
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <aside className="w-64 bg-white border-r flex flex-col">
+    <div className="h-screen bg-slate-50 flex overflow-hidden">
+      <aside className="w-64 bg-white border-r flex flex-col overflow-hidden">
         <div className="p-3 border-b">
           <button
             onClick={() => setActiveId(null)}
@@ -221,12 +241,16 @@ export default function Chat() {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="bg-white border-b px-4 py-3">
           <div className="font-semibold">AI Chatbot</div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4">
+        <main
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto p-4"
+          >
           <div className="max-w-2xl mx-auto space-y-4">
             {loadingMessages && (
               <p className="text-sm text-slate-400 text-center">Loading…</p>

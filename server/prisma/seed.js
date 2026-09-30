@@ -96,14 +96,6 @@ const ads = [
     'travel preparation', 'international travel', 'itinerary',
   ],
   bidCpc: 1.30,
-},
-  {
-    advertiser: 'Booking.com',
-    title: 'Find hotel deals worldwide',
-    body: 'Book hotels, flights, and rentals with free cancellation on most stays.',
-    url: 'https://www.booking.com',
-    keywords: ['travel', 'hotels', 'flights', 'vacation', 'booking'],
-    bidCpc: 1.30,
   },
   {
     advertiser: 'Figma',
@@ -169,6 +161,14 @@ const ads = [
     keywords: ['coding interview', 'programming', 'algorithms', 'career'],
     bidCpc: 1.35,
   },
+  {
+  advertiser: 'DoorDash',
+  title: 'Food delivery from your favorite restaurants',
+  body: 'Get $0 delivery fees on your first order. Thousands of restaurants nearby.',
+  url: 'https://www.doordash.com',
+  keywords: ['food delivery', 'restaurants', 'takeout', 'delivery'],
+  bidCpc: 0.95,
+},
 ]
 
 async function main() {
