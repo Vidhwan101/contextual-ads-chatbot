@@ -2,7 +2,7 @@
 
 An AI chatbot that generates answers and matches semantically relevant sponsored content against both the user's query and the AI's response.
 
-**🔗 Live demo:** https://contextual-ads-chatbot-nine.vercel.app/
+**🔗 Live demo:** https://contextual-ads-chatbot-nine.vercel.app/ 
 **📦 Source:** https://github.com/Vidhwan101/contextual-ads-chatbot
 
 ---
