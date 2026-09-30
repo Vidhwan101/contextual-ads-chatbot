@@ -86,13 +86,17 @@ const ads = [
     bidCpc: 1.40,
   },
   {
-    advertiser: 'DoorDash',
-    title: 'Food delivery from your favorite restaurants',
-    body: 'Get $0 delivery fees on your first order. Thousands of restaurants nearby.',
-    url: 'https://www.doordash.com',
-    keywords: ['food delivery', 'restaurants', 'takeout', 'delivery'],
-    bidCpc: 0.95,
-  },
+  advertiser: 'Booking.com',
+  title: 'Find hotel deals worldwide',
+  body: 'Book hotels, flights, and rentals with free cancellation. Trip planning tools, visa info, and travel guides for every destination.',
+  url: 'https://www.booking.com',
+  keywords: [
+    'travel', 'hotels', 'flights', 'vacation', 'booking',
+    'trip planning', 'travel documents', 'visa', 'passport',
+    'travel preparation', 'international travel', 'itinerary',
+  ],
+  bidCpc: 1.30,
+},
   {
     advertiser: 'Booking.com',
     title: 'Find hotel deals worldwide',
@@ -168,6 +172,10 @@ const ads = [
 ]
 
 async function main() {
+  console.log('Clearing existing ads…')
+  await prisma.messageAd.deleteMany({})
+  await prisma.ad.deleteMany({})
+
   console.log(`Seeding ${ads.length} ads…`)
 
   for (const ad of ads) {

@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
     const stream = await groq.chat.completions.create({
       model: 'qwen/qwen3.8-27b',
       stream: true,
-      max_tokens: 512,
+      max_tokens: 800,
       messages: [
         { role: 'system', content: 'You are a helpful, concise assistant.' },
         ...history.map((m) => ({ role: m.role, content: m.content })),
