@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const API = 'http://localhost:4000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:4000'
 
 function getSessionId() {
   let id = localStorage.getItem('sessionId')
